@@ -51,7 +51,7 @@ HIGHLIGHT_COLORS: dict[str, str] = {
     "endpoint_board": "#0f766e",
     "circle_board": "#db2777",
     "distance_x": "#dc2626",
-    "distance_y": "#2563eb",
+    "distance_y": "#f59e0b",
     "distance_edge": "#f59e0b",
     "distance_angle": "#7c3aed",
     "distance_radius": "#16a34a",
@@ -65,8 +65,8 @@ HIGHLIGHT_COLORS: dict[str, str] = {
     "lack_distance_y": "#3b82f6",
     "lack_distance_other": "#a855f7",
     "final_distance_x": "#b91c1c",
-    "final_distance_y": "#1d4ed8",
-    "final_distance_oz": "#047857",
+    "final_distance_y": "#115e59",
+    "final_distance_oz": "#f97316",
 }
 
 # ---------------------------------------------------------------------------
@@ -325,16 +325,21 @@ def overlay_initial_constraints(
             _overlay_dimension_with_fixed_offset(fig, start, end, dim_point, "#0f20dc", 10.0)
             continue
 
-        if kind == "distance_radius":
-            center = ent.get("defpoint")
-            point_on_circle = ent.get("defpoint4") or ent.get("point_on_circle")
+        if kind == "distance_radius" or (
+            kind == "distance_other"
+            and (ent.get("center") or ent.get("defpoint"))
+            and (ent.get("point_on_circle") or ent.get("defpoint4"))
+        ):
+            center = ent.get("center") or ent.get("defpoint")
+            point_on_circle = ent.get("point_on_circle") or ent.get("defpoint4")
             if not center or not point_on_circle:
                 continue
             c = _as_point(center)
             p = _as_point(point_on_circle)
             _add_line(fig, c, p, "#0f20dc", 0.8)
             _arrow_head(fig, p[0], p[1], math.atan2(c[1] - p[1], c[0] - p[0]), "#0f20dc", 2.5)
-            _add_text(fig, ((c[0] + p[0]) / 2, (c[1] + p[1]) / 2), f"{_distance(c, p):.2f}", "#0f20dc")
+            radius = _distance(c, p)
+            _add_text(fig, ((c[0] + p[0]) / 2, (c[1] + p[1]) / 2), f"{radius:.2f}".rstrip("0").rstrip("."), "#0f20dc")
 
 
 def _arrow_head(
