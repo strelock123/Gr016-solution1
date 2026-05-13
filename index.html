@@ -1,0 +1,1267 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DXF Viewer</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --border: #cfd6de;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --accent-soft: #dbeafe;
+      --danger: #b91c1c;
+      --shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: Segoe UI, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 16px 20px 10px;
+      border-bottom: 1px solid var(--border);
+      background: #fff;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    header p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    main {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      min-height: 0;
+    }
+
+    .left {
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .dropzone {
+      border: 1px dashed #94a3b8;
+      background: #fbfdff;
+      border-radius: 6px;
+      padding: 18px;
+      min-height: 140px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--muted);
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--text);
+    }
+
+    .meta {
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .meta strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    textarea {
+      width: 100%;
+      height: 100%;
+      resize: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text);
+      background: #fcfcfd;
+    }
+
+    .viewer {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 0;
+    }
+
+    .viewer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .svg-wrap {
+      min-height: 0;
+      overflow: auto;
+      background:
+        linear-gradient(45deg, #eef2f7 25%, transparent 25%),
+        linear-gradient(-45deg, #eef2f7 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #eef2f7 75%),
+        linear-gradient(-45deg, transparent 75%, #eef2f7 75%);
+      background-size: 24px 24px;
+      background-position: 0 0, 0 12px, 12px -12px, -12px 0px;
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-width: 100%;
+      min-height: 100%;
+      background: rgba(255, 255, 255, 0.86);
+    }
+
+    .empty {
+      color: var(--muted);
+      display: grid;
+      place-items: center;
+      height: 100%;
+      font-size: 14px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .error {
+      color: var(--danger);
+    }
+
+    @media (max-width: 900px) {
+      main {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+      }
+
+      .left {
+        grid-template-rows: auto auto 220px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DXF Viewer</h1>
+    <p>Kéo thả file <code>.dxf</code>, xem bản vẽ SVG, chạy analysis và đọc log ngay trên một màn hình.</p>
+  </header>
+
+  <main>
+    <section class="panel left">
+      <div id="dropzone" class="dropzone" role="button" tabindex="0">
+        Kéo thả file .dxf vào đây hoặc bấm để chọn file
+        <input id="fileInput" type="file" accept=".dxf" hidden />
+      </div>
+
+      <div class="meta">
+        <div><strong>File:</strong> <span id="fileName">Chưa có file</span></div>
+        <div><strong>Entity:</strong> <span id="entityCount">0</span></div>
+        <div><strong>Trạng thái:</strong> <span id="statusText">Chờ file DXF</span></div>
+      </div>
+
+      <div class="panel" style="padding: 12px; display: grid; grid-template-rows: auto 1fr; min-height: 0;">
+        <div class="actions" style="margin-bottom: 10px;">
+          <button id="analysisBtn" class="primary" disabled>analysis</button>
+          <button id="clearBtn">clear</button>
+        </div>
+        <textarea id="log" readonly></textarea>
+      </div>
+    </section>
+
+    <section class="panel viewer">
+      <div class="viewer-header">
+        <span>SVG Preview</span>
+        <span id="boundsText">No drawing loaded</span>
+      </div>
+      <div id="svgWrap" class="svg-wrap">
+        <div class="empty" id="emptyState">Vùng này sẽ hiển thị bản vẽ SVG sau khi tải DXF.</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const dropzone = document.getElementById("dropzone");
+    const fileInput = document.getElementById("fileInput");
+    const fileName = document.getElementById("fileName");
+    const entityCount = document.getElementById("entityCount");
+    const statusText = document.getElementById("statusText");
+    const analysisBtn = document.getElementById("analysisBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const logBox = document.getElementById("log");
+    const svgWrap = document.getElementById("svgWrap");
+    const boundsText = document.getElementById("boundsText");
+    const emptyState = document.getElementById("emptyState");
+
+    const state = {
+      file: null,
+      text: "",
+      entities: [],
+      renderData: null,
+      dxfMeta: { layers: {}, linetypes: {} },
+      viewport: { svg: null, base: null, current: null },
+      analysisHighlightLines: [],
+    };
+
+    function log(message) {
+      const line = `[${new Date().toLocaleTimeString()}] ${message}`;
+      logBox.value += (logBox.value ? "\n" : "") + line;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function setStatus(text, error = false) {
+      statusText.textContent = text;
+      statusText.className = error ? "error" : "";
+    }
+
+    function resetViewer(message) {
+      state.viewport = { svg: null, base: null, current: null };
+      state.analysisHighlightLines = [];
+      svgWrap.innerHTML = "";
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = message;
+      svgWrap.appendChild(empty);
+      emptyState.hidden = false;
+      boundsText.textContent = "No drawing loaded";
+    }
+
+    function updateMeta() {
+      fileName.textContent = state.file ? state.file.name : "Chưa có file";
+      entityCount.textContent = String(state.entities.length);
+      analysisBtn.disabled = !state.entities.length;
+    }
+
+    function readFile(file) {
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith(".dxf")) {
+        setStatus("Chỉ nhận file .dxf", true);
+        log("Rejected non-DXF file: " + file.name);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        state.file = file;
+        state.text = String(reader.result || "");
+        state.entities = [];
+        state.renderData = null;
+        state.dxfMeta = { layers: {}, linetypes: {} };
+        updateMeta();
+        log("Loaded file: " + file.name + ` (${file.size} bytes)`);
+        try {
+          const parsed = parseDxf(state.text);
+          state.entities = parsed.entities;
+          state.dxfMeta = parsed.meta;
+          state.renderData = buildRenderData(state.entities, state.dxfMeta);
+          updateMeta();
+          renderSvg(state.renderData);
+          setStatus("DXF loaded");
+          log("Parsed entities: " + state.entities.length);
+        } catch (error) {
+          console.error(error);
+          setStatus("Parse error", true);
+          log("Parse error: " + error.message);
+          state.entities = [];
+          state.renderData = null;
+          state.dxfMeta = { layers: {}, linetypes: {} };
+          updateMeta();
+          resetViewer("Không thể parse file DXF này.");
+        }
+      };
+      reader.onerror = () => {
+        setStatus("File read error", true);
+        log("Failed to read file: " + file.name);
+      };
+      reader.readAsText(file);
+    }
+
+    function parseDxf(text) {
+      const lines = text.replace(/\r/g, "").split("\n");
+      const pairs = [];
+      for (let i = 0; i < lines.length - 1; i += 2) {
+        pairs.push([lines[i].trim(), lines[i + 1].trim()]);
+      }
+
+      const entities = [];
+      const meta = { layers: {}, linetypes: {} };
+      let section = "";
+      let tableName = "";
+      let currentTableEntry = null;
+
+      for (let i = 0; i < pairs.length; i++) {
+        const [code, value] = pairs[i];
+        if (code === "0" && value === "SECTION") {
+          if (pairs[i + 1]?.[0] === "2") {
+            section = pairs[i + 1][1].toUpperCase();
+            i++;
+          }
+          continue;
+        }
+        if (code === "0" && value === "ENDSEC") {
+          flushTableEntry();
+          section = "";
+          tableName = "";
+          continue;
+        }
+        if (section === "TABLES") {
+          if (code === "0" && value === "TABLE") {
+            if (pairs[i + 1]?.[0] === "2") {
+              tableName = pairs[i + 1][1].toUpperCase();
+              i++;
+            }
+            continue;
+          }
+          if (code === "0" && value === "ENDTAB") {
+            flushTableEntry();
+            tableName = "";
+            continue;
+          }
+          if (tableName === "LAYER") {
+            if (code === "0" && value === "LAYER") {
+              flushTableEntry();
+              currentTableEntry = { name: "", linetype: "CONTINUOUS" };
+              continue;
+            }
+            if (currentTableEntry && code !== "0") {
+              if (code === "2") currentTableEntry.name = value;
+              if (code === "6") currentTableEntry.linetype = value.toUpperCase();
+            }
+            continue;
+          }
+          if (tableName === "LTYPE") {
+            if (code === "0" && value === "LTYPE") {
+              flushTableEntry();
+              currentTableEntry = { name: "", pattern: [] };
+              continue;
+            }
+            if (currentTableEntry && code !== "0") {
+              if (code === "2") currentTableEntry.name = value.toUpperCase();
+              if (code === "49") currentTableEntry.pattern.push(parseFloat(value));
+            }
+            continue;
+          }
+        }
+        if (section !== "ENTITIES" || code !== "0") continue;
+
+        const type = value.toUpperCase();
+        const entity = { type, data: {} };
+        i++;
+
+        if (type === "LWPOLYLINE") {
+          entity.data.points = [];
+          entity.data.closed = false;
+          for (; i < pairs.length; i++) {
+            const [c, v] = pairs[i];
+            if (c === "0") {
+              i--;
+              break;
+            }
+            if (c === "10") {
+              const x = parseFloat(v);
+              const yPair = pairs[++i];
+              const y = yPair && yPair[0] === "20" ? parseFloat(yPair[1]) : 0;
+              entity.data.points.push({ x, y });
+              continue;
+            }
+            if (c === "70") entity.data.closed = (parseInt(v, 10) & 1) === 1;
+          }
+        } else if (type === "POLYLINE") {
+          entity.data.points = [];
+          entity.data.closed = false;
+          for (; i < pairs.length; i++) {
+            const [c, v] = pairs[i];
+            if (c === "70") entity.data.closed = (parseInt(v, 10) & 1) === 1;
+            if (c === "0" && v === "VERTEX") {
+              const vertex = { x: 0, y: 0 };
+              for (i++; i < pairs.length; i++) {
+                const [vc, vv] = pairs[i];
+                if (vc === "0") {
+                  i--;
+                  break;
+                }
+                if (vc === "10") vertex.x = parseFloat(vv);
+                if (vc === "20") vertex.y = parseFloat(vv);
+              }
+              entity.data.points.push(vertex);
+            }
+            if (c === "0" && v === "SEQEND") break;
+          }
+        } else {
+          for (; i < pairs.length; i++) {
+            const [c, v] = pairs[i];
+            if (c === "0") {
+              i--;
+              break;
+            }
+            if (!entity.data[c]) entity.data[c] = v;
+            else if (Array.isArray(entity.data[c])) entity.data[c].push(v);
+            else entity.data[c] = [entity.data[c], v];
+          }
+        }
+
+        entities.push(entity);
+      }
+
+      flushTableEntry();
+      return { entities, meta };
+
+      function flushTableEntry() {
+        if (!currentTableEntry || !tableName) return;
+        if (tableName === "LAYER" && currentTableEntry.name) {
+          meta.layers[currentTableEntry.name.toUpperCase()] = {
+            linetype: (currentTableEntry.linetype || "CONTINUOUS").toUpperCase(),
+          };
+        }
+        if (tableName === "LTYPE" && currentTableEntry.name) {
+          meta.linetypes[currentTableEntry.name.toUpperCase()] = {
+            pattern: Array.isArray(currentTableEntry.pattern) ? currentTableEntry.pattern.slice() : [],
+          };
+        }
+        currentTableEntry = null;
+      }
+    }
+
+    function buildRenderData(entities, meta) {
+      const shapes = [];
+      const boxes = [];
+
+      for (const entity of entities) {
+        const data = entity.data || {};
+        const style = resolveStyle(entity, data, meta);
+        switch (entity.type) {
+          case "LINE": {
+            const x1 = num(data["10"]);
+            const y1 = num(data["20"]);
+            const x2 = num(data["11"]);
+            const y2 = num(data["21"]);
+            shapes.push({ type: "line", x1, y1, x2, y2, style });
+            boxes.push(lineBox(x1, y1, x2, y2));
+            break;
+          }
+          case "CIRCLE": {
+            const cx = num(data["10"]);
+            const cy = num(data["20"]);
+            const r = num(data["40"]);
+            shapes.push({ type: "circle", cx, cy, r, style });
+            boxes.push({ minX: cx - r, minY: cy - r, maxX: cx + r, maxY: cy + r });
+            break;
+          }
+          case "ARC": {
+            const cx = num(data["10"]);
+            const cy = num(data["20"]);
+            const r = num(data["40"]);
+            const start = num(data["50"]);
+            const end = num(data["51"]);
+            shapes.push({ type: "arc", cx, cy, r, start, end, style });
+            boxes.push(arcBox(cx, cy, r, start, end));
+            break;
+          }
+          case "LWPOLYLINE":
+          case "POLYLINE": {
+            const points = Array.isArray(data.points) ? data.points : [];
+            if (!points.length) break;
+            shapes.push({ type: "polyline", points, closed: !!data.closed, style });
+            boxes.push(pointsBox(points));
+            break;
+          }
+          case "DIMENSION": {
+            const dimShape = buildDimensionShape(data, style);
+            if (!dimShape) break;
+            shapes.push(...dimShape.shapes);
+            boxes.push(...dimShape.boxes);
+            break;
+          }
+          case "SOLID":
+          case "3DFACE": {
+            const pts = collectIndexedPoints(data, [
+              ["10", "20"],
+              ["11", "21"],
+              ["12", "22"],
+              ["13", "23"],
+            ]);
+            if (pts.length < 3) break;
+            shapes.push({ type: "polygon", points: pts, style: { ...style, fill: "rgba(37,99,235,0.08)" } });
+            boxes.push(pointsBox(pts));
+            break;
+          }
+        }
+      }
+
+      const bounds = mergeBoxes(boxes);
+      return { shapes, bounds };
+    }
+
+    function renderSvg(renderData) {
+      const { shapes, bounds } = renderData;
+      if (!shapes.length) {
+        resetViewer("Không tìm thấy entity hỗ trợ để hiển thị.");
+        return;
+      }
+
+      const padding = Math.max(bounds.width, bounds.height) * 0.05 || 10;
+      const viewBox = {
+        minX: bounds.minX - padding,
+        minY: bounds.minY - padding,
+        width: bounds.width + padding * 2 || 100,
+        height: bounds.height + padding * 2 || 100,
+      };
+      const projector = createProjector(viewBox);
+
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      state.viewport = {
+        svg,
+        base: { ...viewBox },
+        current: { ...viewBox },
+      };
+      setSvgViewBox(svg, state.viewport.current);
+
+      for (const shape of shapes) {
+        if (shape.type === "line") {
+          const a = projector.point({ x: shape.x1, y: shape.y1 });
+          const b = projector.point({ x: shape.x2, y: shape.y2 });
+          const el = document.createElementNS(svg.namespaceURI, "line");
+          el.setAttribute("x1", a.x);
+          el.setAttribute("y1", a.y);
+          el.setAttribute("x2", b.x);
+          el.setAttribute("y2", b.y);
+          applyStroke(el, shape.style);
+          svg.appendChild(el);
+        } else if (shape.type === "circle") {
+          const el = document.createElementNS(svg.namespaceURI, "circle");
+          el.setAttribute("cx", shape.cx);
+          el.setAttribute("cy", projector.y(shape.cy));
+          el.setAttribute("r", shape.r);
+          applyStroke(el, shape.style);
+          svg.appendChild(el);
+        } else if (shape.type === "arc") {
+          const el = document.createElementNS(svg.namespaceURI, "path");
+          el.setAttribute("d", arcPath(shape.cx, shape.cy, shape.r, shape.start, shape.end, projector));
+          applyStroke(el, shape.style);
+          svg.appendChild(el);
+        } else if (shape.type === "polyline") {
+          const el = document.createElementNS(svg.namespaceURI, "path");
+          const d = shape.points
+            .map((p, index) => {
+              const projected = projector.point(p);
+              return `${index === 0 ? "M" : "L"} ${projected.x} ${projected.y}`;
+            })
+            .join(" ");
+          el.setAttribute("d", shape.closed ? `${d} Z` : d);
+          applyStroke(el, shape.style);
+          svg.appendChild(el);
+        } else if (shape.type === "text") {
+          const p = projector.point({ x: shape.x, y: shape.y });
+          const el = document.createElementNS(svg.namespaceURI, "text");
+          el.setAttribute("x", p.x);
+          el.setAttribute("y", p.y);
+          el.setAttribute("text-anchor", shape.anchor || "middle");
+          el.setAttribute("dominant-baseline", "middle");
+          el.setAttribute("font-size", shape.fontSize || "3");
+          el.setAttribute("fill", shape.fill || "#111827");
+          el.textContent = shape.text;
+          svg.appendChild(el);
+        } else if (shape.type === "polygon") {
+          const el = document.createElementNS(svg.namespaceURI, "polygon");
+          el.setAttribute("points", shape.points.map((p) => {
+            const projected = projector.point(p);
+            return `${projected.x},${projected.y}`;
+          }).join(" "));
+          applyStroke(el, shape.style);
+          svg.appendChild(el);
+        }
+      }
+
+      svgWrap.innerHTML = "";
+      svgWrap.appendChild(svg);
+      clearHighlightOverlay();
+      emptyState.hidden = true;
+      boundsText.textContent = `Bounds: ${fmt(bounds.minX)} ${fmt(bounds.minY)} to ${fmt(bounds.maxX)} ${fmt(bounds.maxY)}`;
+    }
+
+    async function runAnalysis() {
+      if (!state.file || !state.text) return;
+
+      analysisBtn.disabled = true;
+      log("Analysis started for " + state.file.name);
+      try {
+        const buffer = await state.file.arrayBuffer();
+        const file_b64 = arrayBufferToBase64(buffer);
+        const response = await fetch("/api/analyze", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            filename: state.file.name,
+            file_b64,
+          }),
+        });
+
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || "Analysis failed");
+        }
+
+        logBlock("endpoint_board", payload.endpoint_board || []);
+        logBlock("circle_board", payload.circle_board || []);
+        logBlock("distance_x", payload.distance_x || []);
+        logBlock("distance_y", payload.distance_y || []);
+        logBlock("distance_radius", payload.distance_radius || []);
+        logBlock("distance_angle", payload.distance_angle || []);
+        logBlock("distance_edge", payload.distance_edge || []);
+        logBlock("distance_other", payload.distance_other || []);
+        logBlock("line_entities", payload.line_entities || []);
+        logBlock("arc_entities", payload.arc_entities || []);
+        logBlock("circle_entities", payload.circle_entities || []);
+        logBlock("full_distance_x", payload.full_distance_x || []);
+        logBlock("full_distance_y", payload.full_distance_y || []);
+        logBlock("side_way", payload.side_way || []);
+        logBlock("side_points", payload.side_points || []);
+        logBlock("side_constraints", payload.side_constraints || []);
+        logBlock("top_way", payload.top_way || []);
+        logBlock("top_points", payload.top_points || []);
+        logBlock("top_constraints", payload.top_constraints || []);
+        logBlock("font_way", payload.font_way || []);
+        logBlock("font_points", payload.font_points || []);
+        logBlock("font_constraints", payload.font_constraints || []);
+        logBlock("ox_projection", payload.ox_projection || []);
+        logBlock("oy_projection", payload.oy_projection || []);
+        logBlock("oz_projection", payload.oz_projection || []);
+        logBlock("ox_projection_constraints", payload.ox_projection_constraints || []);
+        logBlock("oy_projection_constraints", payload.oy_projection_constraints || []);
+        logBlock("oz_projection_constraints", payload.oz_projection_constraints || []);
+        logBlock("oz_projection_merge", payload.oz_projection_merge || []);
+        log("delta_oz: " + String(payload.delta_oz ?? 0));
+        logBlock("ox_projection_offset", payload.ox_projection_offset || []);
+        logBlock("oy_projection_offset", payload.oy_projection_offset || []);
+        logBlock("oz_projection_offset", payload.oz_projection_offset || []);
+        logBlock("ox_lack_constraints", payload.ox_lack_constraints || []);
+        logBlock("oy_lack_constraints", payload.oy_lack_constraints || []);
+        logBlock("oz_lack_constraints", payload.oz_lack_constraints || []);
+        logBlock("lack_distance_other", payload.lack_distance_other || []);
+        logBlock("final_distance_x", payload.final_distance_x || []);
+        logBlock("final_distance_y", payload.final_distance_y || []);
+        logBlock("final_distance_oz", payload.final_distance_oz || []);
+        renderHighlightOverlay(payload.highlight_groups || {});
+        log("Analysis finished");
+      } catch (error) {
+        log("Analysis error: " + error.message);
+        setStatus("Analysis error", true);
+      } finally {
+        analysisBtn.disabled = !state.entities.length;
+      }
+    }
+
+    function arrayBufferToBase64(buffer) {
+      let binary = "";
+      const bytes = new Uint8Array(buffer);
+      const chunkSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode(...chunk);
+      }
+      return btoa(binary);
+    }
+
+    function logBlock(title, value) {
+      log(`${title}: ${Array.isArray(value) ? value.length : 0}`);
+      const lines = JSON.stringify(value, null, 2).split("\n");
+      for (const line of lines) {
+        log(line);
+      }
+    }
+
+    function clearAll() {
+      state.file = null;
+      state.text = "";
+      state.entities = [];
+      state.renderData = null;
+      state.dxfMeta = { layers: {}, linetypes: {} };
+      state.viewport = { svg: null, base: null, current: null };
+      state.analysisHighlightLines = [];
+      fileInput.value = "";
+      logBox.value = "";
+      updateMeta();
+      setStatus("Chờ file DXF");
+      resetViewer("Vùng này sẽ hiển thị bản vẽ SVG sau khi tải DXF.");
+      log("Workspace cleared");
+    }
+
+    function num(value) {
+      return Number.parseFloat(value ?? "0") || 0;
+    }
+
+    function fmt(value) {
+      return Number.isFinite(value) ? Number(value).toFixed(2) : "0.00";
+    }
+
+    function lineBox(x1, y1, x2, y2) {
+      return {
+        minX: Math.min(x1, x2),
+        minY: Math.min(y1, y2),
+        maxX: Math.max(x1, x2),
+        maxY: Math.max(y1, y2),
+      };
+    }
+
+    function pointsBox(points) {
+      return points.reduce((box, p) => ({
+        minX: Math.min(box.minX, p.x),
+        minY: Math.min(box.minY, p.y),
+        maxX: Math.max(box.maxX, p.x),
+        maxY: Math.max(box.maxY, p.y),
+      }), {
+        minX: points[0].x,
+        minY: points[0].y,
+        maxX: points[0].x,
+        maxY: points[0].y,
+      });
+    }
+
+    function pointFromData(data, codeX, codeY) {
+      if (data[codeX] == null && data[codeY] == null) return null;
+      return { x: num(data[codeX]), y: num(data[codeY]) };
+    }
+
+    function midpoint(a, b) {
+      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
+
+    function collectIndexedPoints(data, pairs) {
+      const points = [];
+      for (const [codeX, codeY] of pairs) {
+        if (data[codeX] == null || data[codeY] == null) continue;
+        points.push({ x: num(data[codeX]), y: num(data[codeY]) });
+      }
+      return points;
+    }
+
+    function resolveStyle(entity, data, meta) {
+      const linetypeName = String(data["6"] || layerLinetype(data["8"], meta) || "CONTINUOUS").toUpperCase();
+      return {
+        stroke: "#111827",
+        strokeWidth: entity.type === "DIMENSION" ? 0.8 : 1,
+        dasharray: linetypeToDasharray(linetypeName, meta),
+      };
+    }
+
+    function layerLinetype(layerName, meta) {
+      const layer = meta?.layers?.[String(layerName || "").toUpperCase()];
+      return layer?.linetype || "CONTINUOUS";
+    }
+
+    function linetypeToDasharray(name, meta) {
+      const upper = String(name || "CONTINUOUS").toUpperCase();
+      const fromTable = meta?.linetypes?.[upper]?.pattern;
+      if (Array.isArray(fromTable) && fromTable.length) {
+        const dash = fromTable
+          .map((n) => {
+            const v = Math.abs(Number(n));
+            return v > 0 ? v.toFixed(2) : "0.5";
+          })
+          .join(",");
+        return dash;
+      }
+      const preset = {
+        DASHED: "6,3",
+        HIDDEN: "3,3",
+        CENTER: "12,3,2,3",
+        PHANTOM: "8,3,2,3,2,3",
+        DASHDOT: "6,3,1.5,3",
+        DASHDOTDOT: "6,3,1.5,3,1.5,3",
+      };
+      return preset[upper] || "";
+    }
+
+    function buildDimensionShape(data, style) {
+      const dimType = (Number.parseInt(data["70"] || "0", 10) || 0) & 7;
+      if (dimType === 0 || dimType === 1) {
+        const p1 = pointFromData(data, "13", "23");
+        const p2 = pointFromData(data, "14", "24");
+        const dimPoint = pointFromData(data, "10", "20");
+        if (!p1 || !p2 || !dimPoint) return null;
+        const label = data["1"] ? String(data["1"]) : "";
+        const direction = dimType === 1
+          ? unitVector(p2.x - p1.x, p2.y - p1.y)
+          : angleVector(num(data["50"]));
+        return buildLinearDimensionShape(p1, p2, dimPoint, direction, label, style);
+      }
+
+      if (dimType === 3 || dimType === 4) {
+        const p10 = pointFromData(data, "10", "20");
+        const p15 = pointFromData(data, "15", "25");
+        if (!p10 || !p15) return null;
+        const label = data["1"] ? String(data["1"]) : "";
+        return buildCircularDimensionShape(p10, p15, dimType, label, style, num(data["40"]));
+      }
+
+      return null;
+    }
+
+    function buildLinearDimensionShape(p1, p2, dimPoint, direction, label, style) {
+      const shapes = [];
+      const boxes = [];
+      const dir = snapDirection(direction || unitVector(p2.x - p1.x, p2.y - p1.y), 5);
+      const normal = { x: -dir.y, y: dir.x };
+      const offset = dot(dimPoint.x - p1.x, dimPoint.y - p1.y, normal.x, normal.y);
+      const d1 = { x: p1.x + normal.x * offset, y: p1.y + normal.y * offset };
+      const d2 = { x: p2.x + normal.x * offset, y: p2.y + normal.y * offset };
+      const measured = Math.abs(dot(p2.x - p1.x, p2.y - p1.y, dir.x, dir.y));
+      const arrowSize = Math.max(measured * 0.02, 2);
+      const mid = midpoint(d1, d2);
+      const text = label && label !== "<>" ? label : fmt(measured);
+      const textPoint = { x: mid.x + normal.x * (arrowSize * 2.2), y: mid.y + normal.y * (arrowSize * 2.2) };
+
+      shapes.push({ type: "line", x1: p1.x, y1: p1.y, x2: d1.x, y2: d1.y, style: { stroke: "#6b7280", strokeWidth: 0.6 } });
+      shapes.push({ type: "line", x1: p2.x, y1: p2.y, x2: d2.x, y2: d2.y, style: { stroke: "#6b7280", strokeWidth: 0.6 } });
+      shapes.push({ type: "line", x1: d1.x, y1: d1.y, x2: d2.x, y2: d2.y, style: { stroke: style.stroke, strokeWidth: 0.8, dasharray: style.dasharray || "" } });
+      shapes.push(...arrowShapes(d1, d2, arrowSize, style.stroke));
+      shapes.push({ type: "text", x: textPoint.x, y: textPoint.y, text, fontSize: "3", fill: "#111827" });
+
+      boxes.push(lineBox(p1.x, p1.y, d1.x, d1.y));
+      boxes.push(lineBox(p2.x, p2.y, d2.x, d2.y));
+      boxes.push(lineBox(d1.x, d1.y, d2.x, d2.y));
+      return { shapes, boxes };
+    }
+
+    function buildCircularDimensionShape(p10, p15, dimType, label, style, leaderLength) {
+      const shapes = [];
+      const boxes = [];
+      const center = p10;
+      const edge = p15;
+      const radial = unitVector(edge.x - center.x, edge.y - center.y);
+      const radius = distance(center, edge);
+
+      if (dimType === 4) {
+        const ext = Math.max(leaderLength || radius * 0.35, radius * 0.2, 4);
+        const textPoint = { x: edge.x + radial.x * (ext + 1.5), y: edge.y + radial.y * (ext + 1.5) };
+        const leaderEnd = { x: edge.x + radial.x * ext, y: edge.y + radial.y * ext };
+        const text = label && label !== "<>" ? label : `R${fmt(radius)}`;
+
+        shapes.push({ type: "line", x1: center.x, y1: center.y, x2: edge.x, y2: edge.y, style: { stroke: style.stroke, strokeWidth: 0.8 } });
+        shapes.push({ type: "line", x1: edge.x, y1: edge.y, x2: leaderEnd.x, y2: leaderEnd.y, style: { stroke: style.stroke, strokeWidth: 0.8 } });
+        shapes.push(arrowShapeAt(edge, Math.atan2(center.y - edge.y, center.x - edge.x), Math.max(radius * 0.04, 2), style.stroke));
+        shapes.push({ type: "text", x: textPoint.x, y: textPoint.y, text, anchor: "start", fontSize: "3", fill: "#111827" });
+        boxes.push(lineBox(center.x, center.y, leaderEnd.x, leaderEnd.y));
+        return { shapes, boxes };
+      }
+
+      const diameter = radius * 2;
+      const dir = radial;
+      const start = { x: center.x - dir.x * radius, y: center.y - dir.y * radius };
+      const end = { x: center.x + dir.x * radius, y: center.y + dir.y * radius };
+      const normal = { x: -dir.y, y: dir.x };
+      const text = label && label !== "<>" ? label : `D${fmt(diameter)}`;
+      const textPoint = {
+        x: center.x + normal.x * Math.max(diameter * 0.08, 3),
+        y: center.y + normal.y * Math.max(diameter * 0.08, 3),
+      };
+
+      shapes.push({ type: "line", x1: start.x, y1: start.y, x2: end.x, y2: end.y, style: { stroke: style.stroke, strokeWidth: 0.8 } });
+      shapes.push(...arrowShapes(start, end, Math.max(diameter * 0.03, 2), style.stroke));
+      shapes.push({ type: "text", x: textPoint.x, y: textPoint.y, text, fontSize: "3", fill: "#111827" });
+      boxes.push(lineBox(start.x, start.y, end.x, end.y));
+      return { shapes, boxes };
+    }
+
+    function arrowShapes(start, end, size, fill) {
+      const shapes = [];
+      const vx = end.x - start.x;
+      const vy = end.y - start.y;
+      const angle = Math.atan2(vy, vx);
+      const tips = [
+        { p: start, dir: angle },
+        { p: end, dir: angle + Math.PI },
+      ];
+      for (const tip of tips) {
+        const left = polar(tip.p, tip.dir + Math.PI * 0.80, size);
+        const right = polar(tip.p, tip.dir - Math.PI * 0.80, size);
+        shapes.push({
+          type: "polygon",
+          points: [tip.p, left, right],
+          style: { fill, stroke: fill, strokeWidth: 0.4 },
+        });
+      }
+      return shapes;
+    }
+
+    function polar(origin, angle, distance) {
+      return {
+        x: origin.x + Math.cos(angle) * distance,
+        y: origin.y + Math.sin(angle) * distance,
+      };
+    }
+
+    function angleVector(degrees) {
+      const radians = degrees * Math.PI / 180;
+      return { x: Math.cos(radians), y: Math.sin(radians) };
+    }
+
+    function snapDirection(direction, degreesThreshold) {
+      const angle = Math.atan2(direction.y, direction.x);
+      const step = Math.PI / 2;
+      const snapped = Math.round(angle / step) * step;
+      const threshold = (degreesThreshold * Math.PI) / 180;
+      if (Math.abs(angle - snapped) <= threshold) {
+        return { x: Math.cos(snapped), y: Math.sin(snapped) };
+      }
+      return direction;
+    }
+
+    function unitVector(dx, dy) {
+      const len = Math.hypot(dx, dy) || 1;
+      return { x: dx / len, y: dy / len };
+    }
+
+    function dot(ax, ay, bx, by) {
+      return ax * bx + ay * by;
+    }
+
+    function distance(a, b) {
+      return Math.hypot(b.x - a.x, b.y - a.y);
+    }
+
+    function arrowShapeAt(tip, direction, size, fill) {
+      const left = polar(tip, direction + Math.PI * 0.80, size);
+      const right = polar(tip, direction - Math.PI * 0.80, size);
+      return {
+        type: "polygon",
+        points: [tip, left, right],
+        style: { fill, stroke: fill, strokeWidth: 0.4 },
+      };
+    }
+
+    function arcBox(cx, cy, r, startDeg, endDeg) {
+      const pts = [];
+      const start = startDeg * Math.PI / 180;
+      const end = endDeg * Math.PI / 180;
+      const normalizedEnd = end <= start ? end + Math.PI * 2 : end;
+      for (let i = 0; i <= 48; i++) {
+        const t = start + (normalizedEnd - start) * (i / 48);
+        pts.push({ x: cx + Math.cos(t) * r, y: cy + Math.sin(t) * r });
+      }
+      return pointsBox(pts);
+    }
+
+    function mergeBoxes(boxes) {
+      if (!boxes.length) {
+        return { minX: 0, minY: 0, maxX: 100, maxY: 100, width: 100, height: 100 };
+      }
+      const merged = boxes.reduce((acc, box) => ({
+        minX: Math.min(acc.minX, box.minX),
+        minY: Math.min(acc.minY, box.minY),
+        maxX: Math.max(acc.maxX, box.maxX),
+        maxY: Math.max(acc.maxY, box.maxY),
+      }));
+      merged.width = Math.max(merged.maxX - merged.minX, 1);
+      merged.height = Math.max(merged.maxY - merged.minY, 1);
+      return merged;
+    }
+
+    function createProjector(viewBox) {
+      const maxY = viewBox.minY + viewBox.height;
+      return {
+        y(y) {
+          return viewBox.minY + maxY - y;
+        },
+        point(point) {
+          return { x: point.x, y: viewBox.minY + maxY - point.y };
+        },
+      };
+    }
+
+    function arcPath(cx, cy, r, startDeg, endDeg, projector) {
+      const start = anglePoint(cx, cy, r, startDeg);
+      const end = anglePoint(cx, cy, r, endDeg);
+      const projectedStart = projector ? projector.point(start) : start;
+      const projectedEnd = projector ? projector.point(end) : end;
+      let delta = endDeg - startDeg;
+      while (delta <= 0) delta += 360;
+      const largeArc = delta > 180 ? 1 : 0;
+      const sweep = projector ? 0 : 1;
+      return `M ${projectedStart.x} ${projectedStart.y} A ${r} ${r} 0 ${largeArc} ${sweep} ${projectedEnd.x} ${projectedEnd.y}`;
+    }
+
+    function arcPoints(cx, cy, r, startDeg, endDeg, segments = 48) {
+      const pts = [];
+      const start = startDeg * Math.PI / 180;
+      const end = endDeg * Math.PI / 180;
+      const normalizedEnd = end <= start ? end + Math.PI * 2 : end;
+      for (let i = 0; i <= segments; i++) {
+        const t = start + (normalizedEnd - start) * (i / segments);
+        pts.push({ x: cx + Math.cos(t) * r, y: cy + Math.sin(t) * r });
+      }
+      return pts;
+    }
+
+    function anglePoint(cx, cy, r, degrees) {
+      const radians = degrees * Math.PI / 180;
+      return { x: cx + Math.cos(radians) * r, y: cy + Math.sin(radians) * r };
+    }
+
+    function setSvgViewBox(svg, box) {
+      svg.setAttribute("viewBox", `${box.minX} ${box.minY} ${box.width} ${box.height}`);
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function applyStroke(el, style) {
+      if (style?.fill != null) el.setAttribute("fill", style.fill);
+      else el.setAttribute("fill", "none");
+      el.setAttribute("stroke", style?.stroke || "#111827");
+      el.setAttribute("stroke-width", style?.strokeWidth || "1");
+      el.setAttribute("vector-effect", "non-scaling-stroke");
+      if (style?.dasharray) el.setAttribute("stroke-dasharray", style.dasharray);
+    }
+
+    function clearHighlightOverlay() {
+      if (!state.viewport.svg) return;
+      const existing = state.viewport.svg.querySelector("[data-overlay='analysis-highlight']");
+      if (existing) existing.remove();
+    }
+
+    function renderHighlightOverlay(highlightGroups) {
+      if (!state.viewport.svg || !state.viewport.current) return;
+      clearHighlightOverlay();
+
+      const svg = state.viewport.svg;
+      const projector = createProjector(state.viewport.current);
+      const layer = document.createElementNS(svg.namespaceURI, "g");
+      layer.setAttribute("data-overlay", "analysis-highlight");
+
+      const colors = {
+        distance_x: "#dc2626",
+        distance_y: "#2563eb",
+        distance_edge: "#f59e0b",
+        distance_angle: "#7c3aed",
+        distance_radius: "#16a34a",
+        distance_other: "#6b7280",
+        endpoint_board: "#0f766e",
+        circle_board: "#db2777",
+        full_distance_x: "#ea580c",
+        full_distance_y: "#0891b2",
+        lack_distance_x: "#ef4444",
+        lack_distance_y: "#3b82f6",
+        lack_distance_other: "#a855f7",
+        side_way: "#14b8a6",
+        top_way: "#f97316",
+        font_way: "#8b5cf6",
+        final_distance_x: "#b91c1c",
+        final_distance_y: "#1d4ed8",
+        final_distance_oz: "#047857",
+      };
+
+      for (const [groupName, items] of Object.entries(highlightGroups || {})) {
+        const color = colors[groupName] || "#111827";
+        drawGroupHighlights(layer, projector, items || [], color);
+      }
+
+      if (layer.childNodes.length) {
+        svg.appendChild(layer);
+      }
+    }
+
+    function drawGroupHighlights(layer, projector, items, color) {
+      for (const item of items || []) {
+        const points = Array.isArray(item?.points) ? item.points : [];
+        if (points.length >= 2) {
+          for (let i = 0; i < points.length - 1; i++) {
+            const a = projector.point({ x: num(points[i][0]), y: num(points[i][1]) });
+            const b = projector.point({ x: num(points[i + 1][0]), y: num(points[i + 1][1]) });
+            const line = document.createElementNS(layer.namespaceURI, "line");
+            line.setAttribute("x1", a.x);
+            line.setAttribute("y1", a.y);
+            line.setAttribute("x2", b.x);
+            line.setAttribute("y2", b.y);
+            line.setAttribute("stroke", color);
+            line.setAttribute("stroke-width", "1.5");
+            line.setAttribute("stroke-dasharray", "4,2");
+            line.setAttribute("vector-effect", "non-scaling-stroke");
+            line.setAttribute("fill", "none");
+            layer.appendChild(line);
+          }
+          for (const point of points) {
+            appendMarker(layer, projector.point({ x: num(point[0]), y: num(point[1]) }), color);
+          }
+          continue;
+        }
+
+        if (Array.isArray(item?.point)) {
+          const p = projector.point({ x: num(item.point[0]), y: num(item.point[1]) });
+          appendMarker(layer, p, color, item.name || "");
+          continue;
+        }
+
+        if (Array.isArray(item?.center)) {
+          const p = projector.point({ x: num(item.center[0]), y: num(item.center[1]) });
+          appendMarker(layer, p, color);
+          continue;
+        }
+
+        // point-only fallthrough handled above
+      }
+    }
+
+    function appendMarker(layer, point, color, name) {
+      const circle = document.createElementNS(layer.namespaceURI, "circle");
+      circle.setAttribute("cx", point.x);
+      circle.setAttribute("cy", point.y);
+      circle.setAttribute("r", "1.8");
+      circle.setAttribute("fill", color);
+      circle.setAttribute("stroke", "#ffffff");
+      circle.setAttribute("stroke-width", "0.6");
+      circle.setAttribute("vector-effect", "non-scaling-stroke");
+      layer.appendChild(circle);
+
+      // Render endpoint name label next to the marker when provided.
+      if (name) {
+        const text = document.createElementNS(layer.namespaceURI, "text");
+        text.setAttribute("x", point.x);
+        text.setAttribute("y", point.y - 3);
+        text.setAttribute("text-anchor", "middle");
+        text.setAttribute("dominant-baseline", "auto");
+        text.setAttribute("font-size", "3");
+        text.setAttribute("font-weight", "bold");
+        text.setAttribute("fill", color);
+        text.setAttribute("stroke", "#ffffff");
+        text.setAttribute("stroke-width", "0.25");
+        text.setAttribute("paint-order", "stroke");
+        text.textContent = name;
+        layer.appendChild(text);
+      }
+    }
+
+    dropzone.addEventListener("click", () => fileInput.click());
+    dropzone.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        fileInput.click();
+      }
+    });
+    fileInput.addEventListener("change", (event) => readFile(event.target.files[0]));
+
+    dropzone.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      dropzone.classList.add("dragover");
+    });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+    dropzone.addEventListener("drop", (event) => {
+      event.preventDefault();
+      dropzone.classList.remove("dragover");
+      readFile(event.dataTransfer.files[0]);
+    });
+
+    svgWrap.addEventListener("wheel", (event) => {
+      if (!state.viewport.svg || !state.viewport.current) return;
+      event.preventDefault();
+      const rect = svgWrap.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+
+      const factor = event.deltaY < 0 ? 0.9 : 1.1;
+      const current = state.viewport.current;
+      const mouseX = (event.clientX - rect.left) / rect.width;
+      const mouseY = (event.clientY - rect.top) / rect.height;
+      const anchorX = current.minX + current.width * mouseX;
+      const anchorY = current.minY + current.height * mouseY;
+      const nextWidth = clamp(current.width * factor, state.viewport.base.width * 0.1, state.viewport.base.width * 20);
+      const nextHeight = clamp(current.height * factor, state.viewport.base.height * 0.1, state.viewport.base.height * 20);
+
+      state.viewport.current = {
+        minX: anchorX - nextWidth * mouseX,
+        minY: anchorY - nextHeight * mouseY,
+        width: nextWidth,
+        height: nextHeight,
+      };
+      setSvgViewBox(state.viewport.svg, state.viewport.current);
+    }, { passive: false });
+
+    svgWrap.addEventListener("dblclick", () => {
+      if (!state.viewport.svg || !state.viewport.base) return;
+      state.viewport.current = { ...state.viewport.base };
+      setSvgViewBox(state.viewport.svg, state.viewport.current);
+    });
+
+    analysisBtn.addEventListener("click", runAnalysis);
+    clearBtn.addEventListener("click", clearAll);
+
+    resetViewer("Vùng này sẽ hiển thị bản vẽ SVG sau khi tải DXF.");
+    updateMeta();
+    log("Ready");
+  </script>
+</body>
+</html>
