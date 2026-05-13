@@ -64,7 +64,7 @@
 
 ```bash
 # Clone repository
-cd KIEM_TRA_DXF
+git clone https://github.com/tuanvan03/Gr016-solution1.git
 
 # Create virtual environment (recommended)
 python -m venv .venv
